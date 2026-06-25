@@ -56,6 +56,40 @@ func CreateTmpMysqlAuthFile(af *ini.File) (authFile string, err error) {
 	return
 }
 
+// CreateTmpMysqlDefaultsFile writes a single MySQL option file that combines the
+// user-provided defaults file (e.g. the server my.cnf, needed for datadir and
+// other server settings) with the connection credentials section, and returns
+// its path. It is passed to xtrabackup/mariadb-backup as a single
+// `--defaults-file`: these tools accept only one leading "defaults" option and
+// it must come first, so credentials cannot be supplied via a separate
+// `--defaults-extra-file` when `--defaults-file` is used.
+func CreateTmpMysqlDefaultsFile(srcDefaultsFile string, af *ini.File) (defaultsFile string, err error) {
+	src, err := os.ReadFile(srcDefaultsFile)
+	if err != nil {
+		return "", err
+	}
+
+	defaultsFile = filepath.Join("/tmp", misc.RandString(20))
+	file, err := os.OpenFile(defaultsFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0400)
+	if err != nil {
+		return
+	}
+	defer func() { _ = file.Close() }()
+
+	// Inline the user's defaults file first (keeps its groups, e.g. [mysqld]
+	// datadir), then append the credentials group.
+	if _, err = file.Write(src); err != nil {
+		return
+	}
+	if _, err = file.WriteString("\n"); err != nil {
+		return
+	}
+	if _, err = af.WriteTo(file); err != nil {
+		return
+	}
+	return
+}
+
 func DeleteTmpMysqlAuthFile(path string) error {
 	return os.RemoveAll(path)
 }
