@@ -42,6 +42,7 @@ type job struct {
 type target struct {
 	extraKeys       []string
 	authFile        *ini.File
+	defaultsFile    string
 	ignoreDatabases string
 	gzip            bool
 	isSlave         bool
@@ -67,6 +68,7 @@ type SourceParams struct {
 	TargetDBs     []string
 	Excludes      []string
 	ExtraKeys     []string
+	DefaultsFile  string
 	Gzip          bool
 	IsSlave       bool
 	Prepare       bool
@@ -131,6 +133,7 @@ func Init(jp JobParams) (interfaces.Job, error) {
 
 		j.targets[src.Name] = target{
 			authFile:        authFile,
+			defaultsFile:    src.DefaultsFile,
 			ignoreDatabases: ignoreDBs,
 			extraKeys:       src.ExtraKeys,
 			gzip:            src.Gzip,
@@ -296,7 +299,13 @@ func (j *job) createTmpBackup(logCh chan logger.LogRecord, tmpBackupFile, tgtNam
 		}
 	}()
 
-	// define commands args with auth options
+	// define commands args with defaults options.
+	// `--defaults-file` (if set) and `--defaults-extra-file` must be the first
+	// options on the command line, otherwise xtrabackup/mariadb-backup refuses
+	// with "--defaults-file must be specified first on the command line".
+	if target.defaultsFile != "" {
+		backupArgs = append(backupArgs, "--defaults-file="+target.defaultsFile)
+	}
 	backupArgs = append(backupArgs, "--defaults-extra-file="+authFile)
 	prepareArgs = backupArgs
 	// add backup options
